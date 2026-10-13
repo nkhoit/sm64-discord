@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>sm64coopdx web</title>
+<link rel="icon" href="data:,">
 <style>
   :root { color-scheme: dark; }
   html, body { margin: 0; height: 100%; background: #000; color: #ddd; font: 14px system-ui, sans-serif; }
@@ -69,10 +70,19 @@
   <p id="status">Loading…</p>
 </div>
 <script>
-  // The game runtime loads in parallel with sign-in; app.js waits on this before touching the file system.
-  // INVOKE_RUN=0, so the game only starts when app.js calls callMain.
+  // boot.js signs in, gets an asset session and then loads the game runtime and app.js, which waits on
+  // this before touching the file system. INVOKE_RUN=0, so the game only starts when app.js calls callMain.
   // Release id, filled in by web/version-dist.py at `make web-dist` (empty when served from web/ directly).
   window.BUILD_ID = '';
+  // Asset session from the relay (POST /api/assets), set by boot.js; the engine files need it.
+  window.ASSET_SESSION = '';
+  // URL of a release file: one release id for all of them (?v=), plus the asset session (&s=).
+  window.assetUrl = (path) => {
+    const params = [];
+    if (window.BUILD_ID) { params.push('v=' + window.BUILD_ID); }
+    if (window.ASSET_SESSION) { params.push('s=' + encodeURIComponent(window.ASSET_SESSION)); }
+    return params.length ? path + '?' + params.join('&') : path;
+  };
   let resolveRuntime;
   window.runtimeReady = new Promise((resolve) => { resolveRuntime = resolve; });
   var Module = {
@@ -82,23 +92,10 @@
     preRun: [() => { Module.FS.mkdirTree('/app/mods'); }],
     onRuntimeInitialized: () => resolveRuntime(),
     // .wasm and .data get the same release id as sm64coopdx.js, so all three always come from one build
-    locateFile: (path, prefix) => prefix + path + (window.BUILD_ID ? '?v=' + window.BUILD_ID : ''),
+    locateFile: (path, prefix) => prefix + window.assetUrl(path),
     setStatus: (text) => { if (text) { document.getElementById('status').textContent = text; } },
   };
 </script>
-<script>
-  // Discord's mobile apps open the activity with platform=mobile. There are no touch controls yet, so
-  // don't download the game there; app.js shows a message instead.
-  {
-    const launch = new URLSearchParams(location.search);
-    if (!(launch.has('frame_id') && launch.get('platform') === 'mobile')) {
-      const game = document.createElement('script');
-      game.src = 'sm64coopdx.js';
-      game.async = false;
-      document.body.appendChild(game);
-    }
-  }
-</script>
-<script type="module" src="app.js"></script>
+<script type="module" src="boot.js"></script>
 </body>
 </html>

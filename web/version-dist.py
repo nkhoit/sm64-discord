@@ -15,7 +15,7 @@ import pathlib
 import sys
 
 dist = pathlib.Path(sys.argv[1])
-ASSETS = ["app.js", "diagnostics.js", "sm64coopdx.js", "sm64coopdx.wasm", "sm64coopdx.data"]
+ASSETS = ["boot.js", "app.js", "diagnostics.js", "sm64coopdx.js", "sm64coopdx.wasm", "sm64coopdx.data"]
 files = [dist / name for name in ASSETS] + sorted((dist / "vendor").glob("*.js")) + [dist / "index.html"]
 digest = hashlib.sha256()
 for path in files:
@@ -35,12 +35,14 @@ def rewrite(name, replacements):
 
 v = f"?v={build_id}"
 rewrite("index.html", [
-    ("window.BUILD_ID = '';", f"window.BUILD_ID = '{build_id}';"),  # also used by locateFile for .wasm/.data
-    ("game.src = 'sm64coopdx.js';", f"game.src = 'sm64coopdx.js{v}';"),
-    ('<script type="module" src="app.js"></script>', f'<script type="module" src="app.js{v}"></script>'),
+    # window.assetUrl() adds it to the engine files (sm64coopdx.js/.wasm/.data, app.js, diagnostics.js)
+    ("window.BUILD_ID = '';", f"window.BUILD_ID = '{build_id}';"),
+    ('<script type="module" src="boot.js"></script>', f'<script type="module" src="boot.js{v}"></script>'),
+])
+rewrite("boot.js", [
+    ("import('./vendor/discord-sdk.js')", f"import('./vendor/discord-sdk.js{v}')"),
 ])
 rewrite("app.js", [
-    ("from './diagnostics.js';", f"from './diagnostics.js{v}';"),
     ("import('./vendor/discord-sdk.js')", f"import('./vendor/discord-sdk.js{v}')"),
 ])
 print(f"web-dist build id {build_id}")

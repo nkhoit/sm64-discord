@@ -1574,7 +1574,7 @@ else
 	@$(PRINT) "$(GREEN)Linking executable: $(BLUE)$@ $(NO_COL)\n"
 	$(V)$(LD) $(PROF_FLAGS) -L $(BUILD_DIR) -o $@ $(O_FILES) $(ULTRA_O_FILES) $(GODDARD_O_FILES) $(LDFLAGS)
 ifeq ($(TARGET_WEB),1)
-	$(V)cp web/index.html web/app.js web/diagnostics.js $(BUILD_DIR)/ && mkdir -p $(BUILD_DIR)/vendor && cp web/vendor/*.js $(BUILD_DIR)/vendor/
+	$(V)cp web/index.html web/boot.js web/app.js web/diagnostics.js $(BUILD_DIR)/ && mkdir -p $(BUILD_DIR)/vendor && cp web/vendor/*.js $(BUILD_DIR)/vendor/
 endif
 endif
 
@@ -1586,7 +1586,7 @@ WEB_DIST_DIR := $(BUILD_DIR)/dist
 web-dist: $(EXE)
 	@$(PRINT) "$(GREEN)Creating web release: $(BLUE)$(WEB_DIST_DIR) $(NO_COL)\n"
 	$(V)rm -rf $(WEB_DIST_DIR) && mkdir -p $(WEB_DIST_DIR)/vendor
-	$(V)cp web/index.html web/app.js web/diagnostics.js $(EXE) $(EXE:.js=.wasm) $(EXE:.js=.data) $(WEB_DIST_DIR)/
+	$(V)cp web/index.html web/boot.js web/app.js web/diagnostics.js $(EXE) $(EXE:.js=.wasm) $(EXE:.js=.data) $(WEB_DIST_DIR)/
 	$(V)cp web/vendor/*.js $(WEB_DIST_DIR)/vendor/
 	$(V)$(PYTHON) web/version-dist.py $(WEB_DIST_DIR)
 ifeq ($(WEB_PRECOMPRESS),1)

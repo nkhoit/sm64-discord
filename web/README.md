@@ -9,7 +9,7 @@ make -j TARGET_WEB=1 web-dist
 cd build/us_web/dist && python3 -m http.server 8000
 ```
 
-`web-dist` copies just the served files (`index.html`, `app.js`, `sm64coopdx.js/.wasm/.data`,
+`web-dist` copies just the served files (`index.html`, `boot.js`, `app.js`, `diagnostics.js`, `sm64coopdx.js/.wasm/.data`,
 `vendor/`) to `build/us_web/dist`; serve or deploy that rather than `build/us_web`, which also
 holds the object files. `WEB_PRECOMPRESS=1` adds `.gz` (and `.br` with brotli installed) copies,
 which the relay sends to browsers that accept them (see `server/README.md`, "Static files"). That
@@ -20,7 +20,9 @@ If you built `TARGET_WEB=1` before release builds dropped debug info, run `rm -r
 (or `make clean`) once: the Makefile doesn't track compiler flags, so the old objects would be
 relinked into the 60 MB debug `.wasm`. Check that `sm64coopdx.wasm` is about 32 MB.
 
-For co-op, serve it with the relay instead (see `server/README.md`). The page (`web/app.js`)
+For co-op, serve it with the relay instead (see `server/README.md`). The relay serves only
+`index.html`, `web/boot.js`, `vendor/` and `favicon.ico` to anyone: `boot.js` signs in, gets an asset session and then
+loads the game files (`sm64coopdx.*`, `app.js`, `diagnostics.js`) with it. The page (`web/app.js`)
 has two modes:
 
 - **Discord**: launched as an Activity (the URL has `frame_id`). It signs in with the Embedded

@@ -170,6 +170,20 @@ int main(int argc, char* argv[]) {
 
     std::cout << std::unitbuf; // keep logs live when stdout is a file
 
+    config.assetSecret = env("SM64_ASSET_SECRET");
+    if (config.assetSecret.empty()) {
+        auto generated = AssetAuth::random_secret();
+        if (!generated) {
+            std::cerr << "configuration error: could not generate an asset session secret; set SM64_ASSET_SECRET\n";
+            return 1;
+        }
+        config.assetSecret = std::move(*generated);
+        std::cout << "SM64_ASSET_SECRET is not set: using a random one, so game file sessions end when the relay restarts\n";
+    } else if (config.assetSecret.size() < AssetAuth::kMinSecretLength) {
+        std::cerr << "configuration error: SM64_ASSET_SECRET must be at least " << AssetAuth::kMinSecretLength << " characters\n";
+        return 1;
+    }
+
     // One thread: rooms are only touched from this io_context, so they need no locking.
     // Api runs blocking Discord calls on its own pool and posts results back here.
     asio::io_context io;

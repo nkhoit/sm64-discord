@@ -9,7 +9,7 @@ readable copy on the relay host; deployment never copies it into the web release
 | File | What it is |
 | --- | --- |
 | `deploy.sh` | builds (or takes) the web release and the relay, installs them under `$PREFIX`, restarts the relay if its binary changed |
-| `sm64-relay.env.example` | the relay's `EnvironmentFile`: Discord client credentials and optional hosted-ROM path/allowlist |
+| `sm64-relay.env.example` | the relay's `EnvironmentFile`: Discord client credentials, the asset session secret, and optional hosted-ROM path/allowlist |
 | `examples/sm64-relay.user.service` | systemd user unit for the relay (`%h` paths, option A) |
 | `examples/sm64-tunnel.user.service` | systemd user unit for `cloudflared tunnel run sm64` (option A) |
 | `examples/cloudflared-tunnel.yml` | example `~/.cloudflared/sm64.yml`: `sm64.example.com` → `http://127.0.0.1:8080` |
@@ -162,10 +162,16 @@ mode can't be reached through it even if the flag were set.
 
 ### Caching (CDNs and Cloudflare)
 
-The relay serves every file with `Cache-Control: no-cache` plus an `ETag`. Some proxies (Cloudflare's
-default "Browser Cache TTL", for example) override that for `.js` files. That is harmless here:
+The relay serves every file with `Cache-Control: no-cache` plus an `ETag`; the game files, which need
+a signed-in asset session (`?s=`, see "Static files" in `server/README.md`), with `private, no-cache`,
+so a shared cache never hands them to someone who didn't sign in. Some proxies (Cloudflare's
+default "Browser Cache TTL", for example) override `no-cache` for `.js` files. That is harmless here:
 `make web-dist` gives every asset a per-release URL (`?v=<build id>`, see `web/version-dist.py`), and
-only `index.html` is unversioned. You don't need any cache rules; just don't cache `index.html` for long.
+only `index.html` is unversioned. You don't need any cache rules; just don't cache `index.html` for long,
+and don't add a rule that caches everything regardless of `private`.
+
+Set `SM64_ASSET_SECRET` in the env file (`openssl rand -hex 32`). Without it the relay makes a random
+one at each start, which works but makes anyone loading the game during a restart reopen the Activity.
 
 ## What to watch for
 

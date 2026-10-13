@@ -30,14 +30,18 @@ DISCORD_CLIENT_ID=... DISCORD_CLIENT_SECRET=... \
 | `--allow-lan-test` | let plain browsers on the local network play without Discord (see below). **Leave off on a public server.** It also gates direct LAN hosted-ROM downloads. |
 | `DISCORD_CLIENT_ID`, `DISCORD_CLIENT_SECRET` | the Discord application's OAuth2 credentials. Without them, Discord sign-in is off. |
 | `DISCORD_GUILD_IDS` | comma-separated numeric Discord server IDs allowed to download a configured hosted ROM and to submit hosted-session diagnostics. Required with `SM64_ROM_PATH`; it does not restrict legacy BYO sessions. |
+| `SM64_ASSET_SECRET` | signs the asset sessions that unlock the game files (see [Static files](#static-files)). At least 32 characters, e.g. `openssl rand -hex 32`. If unset, a random secret is made at each start. |
 | `SM64_DIAGNOSTICS` | disable diagnostics ingestion with the exact value `0`; enabled by default. |
 | `SM64_ROM_PATH` | optional absolute path to the operator's ROM. Must resolve to a readable, nonempty regular file outside the canonical `--www` tree and be at most 32 MiB. Loaded once into relay memory at startup; invalid configuration stops startup. |
 | `DISCORD_API_BASE` | only for tests: point Discord API calls at `server/tests/mock_discord.py` |
 
 ## How a player gets in
 
-1. Inside Discord the page signs in with the Embedded App SDK (`authorize`), and the relay
-   exchanges the code for a token (`POST /api/token`).
+1. Inside Discord the page (`web/boot.js`, which is public) signs in with the Embedded App SDK
+   (`authorize`), and the relay exchanges the code for a token (`POST /api/token`). It then asks for
+   an asset session (`POST /api/assets` with the token and `guild_id`; the relay checks membership,
+   and `DISCORD_GUILD_IDS` when set) and only then loads the game files with it (see
+   [Static files](#static-files)).
 2. If hosted delivery is configured, the page requests `POST /api/rom` with the token and SDK's
    `guild_id` before reserving a room. The relay requires the server ID in `DISCORD_GUILD_IDS`, then
    verifies the user and live/cached membership with Discord. The binary response is `no-store`; no
@@ -120,8 +124,40 @@ audio indicators only; it never prints raw reports or ticket values. Treat remot
 
 ## Static files
 
+Only `index.html`, `boot.js`, `vendor/` (the Discord SDK) and `favicon.ico` (browsers request it
+without the session; the page itself declares no icon file) are public. Every other file (the engine:
+`sm64coopdx.js/.wasm/.data`, and `app.js`, `diagnostics.js`) needs an **asset session** as `?s=`:
+without one the answer is `401`, with a bad, forged or expired one `403`, both `Cache-Control:
+no-store`. The page gets a session from `POST /api/assets`:
 
-Every file is sent with `ETag`, `Last-Modified` and `Cache-Control: no-cache`. The file names
+- `{mode: "discord", access_token, guild_id}`: the same check as a game session (the user is a member
+  of that server; with `DISCORD_GUILD_IDS` set, the server must also be listed);
+- `{mode: "lan"}`: LAN test mode, under the same conditions as LAN sessions.
+
+The answer is `{session, expires_at, expires_in}`. A session is `<expiry>.<HMAC-SHA256>` signed with
+`SM64_ASSET_SECRET`; the relay keeps no state for it. It expires at the end of the current hour, or the
+next one if less than 30 minutes are left (30–90 minutes), so sessions in the same hour share URLs and
+the browser cache keeps working. It's only needed while the page loads: a rejoin reloads the page,
+which signs in again and gets a fresh one.
+
+Why a URL parameter and not a cookie: inside Discord the page runs in a third-party iframe
+(`<app id>.discordsays.com` inside `discord.com`) and every request goes through Discord's proxy.
+A cookie there would need `SameSite=None; Secure; Partitioned`, depend on the proxy passing
+`Set-Cookie` and `Cookie` through unchanged, and on the browser not blocking third-party cookies.
+A signed URL parameter works through any proxy, and Emscripten fetches the `.wasm` and `.data` by
+URL (`locateFile`), so it carries the session without special handling.
+
+**What this protects, and what it doesn't.** A session is not tied to a user: everyone who signs in
+during the same window gets the same one, and any URL that carries it (for example copied out of the
+browser's developer tools) works for anyone until it expires, up to 90 minutes. It keeps casual
+downloaders and crawlers from pulling the game files off the relay; it is not per-user access control.
+Rotating `SM64_ASSET_SECRET` (and restarting) invalidates every session at once.
+
+Engine files are answered with `Cache-Control: private, no-cache` so no shared cache (such as
+Cloudflare's) keeps a copy for others; the public files with `no-cache`. Both carry an ETag.
+
+
+Every file is sent with `ETag` and `Last-Modified`, and `no-cache` (as above). The file names
 aren't content-hashed, so browsers check on every load, but an unchanged file (including the
 large `.wasm` and `.data`) costs only a `304`. ETags are compared weakly, since Cloudflare marks
 them weak when it compresses.

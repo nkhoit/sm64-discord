@@ -45,10 +45,17 @@ const noFixture = (r) => !r.bytes.equals(fixture);
   const notConfigured = await fetch(`${unconfigured}/api/config`).then((r) => r.json());
   check('config leaves hosted ROM off when no file is configured', notConfigured.hostedRom === false, notConfigured);
 
-  const hardlinkAlias = await staticCall(hosted, '/public.data');
-  check('unauthenticated static hard-link alias to original hosted ROM inode is denied after source pathname replacement',
+  // Static files other than the bootstrap need an asset session (LAN test mode is on for this relay).
+  const assets = await fetch(`${hosted}/api/assets`, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+                                                       body: JSON.stringify({ mode: 'lan' }) }).then((r) => r.json());
+  const s = `?s=${encodeURIComponent(assets.session || '')}`;
+  const anonAlias = await staticCall(hosted, '/public.data');
+  check('static hard-link alias without an asset session is 401 without bytes', anonAlias.status === 401 && noFixture(anonAlias),
+        { status: anonAlias.status, bytes: anonAlias.bytes.length });
+  const hardlinkAlias = await staticCall(hosted, '/public.data' + s);
+  check('static hard-link alias (with an asset session) to original hosted ROM inode is denied after source pathname replacement',
         hardlinkAlias.status === 404 && noFixture(hardlinkAlias), { status: hardlinkAlias.status, bytes: hardlinkAlias.bytes.length });
-  const compressedAlias = await staticCall(hosted, '/public.js', { 'Accept-Encoding': 'br' });
+  const compressedAlias = await staticCall(hosted, '/public.js' + s, { 'Accept-Encoding': 'br' });
   check('precompressed hard-link alias is skipped and the safe static base is served',
         compressedAlias.status === 200 && compressedAlias.bytes.equals(Buffer.from('PUBLIC STATIC FALLBACK'))
           && !compressedAlias.headers['content-encoding'],
