@@ -40,7 +40,7 @@ void djui_panel_pause_quit_yes(UNUSED struct DjuiBase* caller) {
 }
 
 void djui_panel_pause_disconnect_key_update(int scancode) {
-    if (!PAUSE_MENU_HOST_BUTTONS) { return; }
+#if PAUSE_MENU_HOST_BUTTONS
     if (gDjuiInMainMenu || find_object_with_behavior(bhvActSelector) != NULL) { return; }
 
     for (int i = 0; i < MAX_BINDS; i++) {
@@ -48,8 +48,12 @@ void djui_panel_pause_disconnect_key_update(int scancode) {
             djui_panel_pause_quit_yes(NULL);
         }
     }
+#else
+    (void)scancode;
+#endif
 }
 
+#if PAUSE_MENU_HOST_BUTTONS
 static void djui_panel_pause_quit(struct DjuiBase* caller) {
     if (gMarioStates[0].action == ACT_PUSHING_DOOR || gMarioStates[0].action == ACT_PULLING_DOOR) { return; }
 
@@ -65,6 +69,7 @@ static void djui_panel_pause_quit(struct DjuiBase* caller) {
                                 djui_panel_pause_quit_yes);
     }
 }
+#endif
 
 void djui_panel_pause_create(struct DjuiBase* caller) {
     if (gDjuiPanelPauseCreated) { return; }
@@ -83,12 +88,13 @@ void djui_panel_pause_create(struct DjuiBase* caller) {
         struct DjuiButton* button3 = djui_button_create(body, DLANG(PAUSE, OPTIONS), DJUI_BUTTON_STYLE_NORMAL, djui_panel_options_create);
         defaultBase = &button3->base;
 
-        if (!PAUSE_MENU_HOST_BUTTONS) {
-        } else if (gNetworkType == NT_SERVER) {
+#if PAUSE_MENU_HOST_BUTTONS
+        if (gNetworkType == NT_SERVER) {
             djui_button_create(body, DLANG(PAUSE, SERVER_SETTINGS), DJUI_BUTTON_STYLE_NORMAL, djui_panel_host_create);
         } else {
             djui_button_create(body, DLANG(PAUSE, SERVER_SETTINGS), DJUI_BUTTON_STYLE_NORMAL, djui_panel_client_server_settings_create);
         }
+#endif
 
         struct Mod* addedMods[MAX_HOOKED_MOD_MENU_ELEMENTS] = { 0 };
         int modCount = 0;
@@ -124,12 +130,13 @@ void djui_panel_pause_create(struct DjuiBase* caller) {
 
         djui_button_create(body, DLANG(PAUSE, RESUME), DJUI_BUTTON_STYLE_NORMAL, djui_panel_pause_resume);
 
-        if (!PAUSE_MENU_HOST_BUTTONS) {
-        } else if (gNetworkType == NT_SERVER) {
+#if PAUSE_MENU_HOST_BUTTONS
+        if (gNetworkType == NT_SERVER) {
             djui_button_create(body, DLANG(PAUSE, STOP_HOSTING), DJUI_BUTTON_STYLE_BACK, djui_panel_pause_quit);
         } else {
             djui_button_create(body, DLANG(PAUSE, DISCONNECT), DJUI_BUTTON_STYLE_BACK, djui_panel_pause_quit);
         }
+#endif
     }
 
 #ifdef WEB_TEST_HOOKS

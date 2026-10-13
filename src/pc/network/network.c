@@ -137,9 +137,9 @@ bool network_init(enum NetworkType inNetworkType, bool reconnecting) {
     // set server settings
 #ifdef TARGET_WEB
     // The Activity always plays by stock rules: it has no host panel, so settings saved by an earlier
-    // build must not change them. The saved config itself is left alone; only the player limit is used.
+    // build must not change them, including the player limit: rooms hold MAX_PLAYERS, the relay's cap too.
     gServerSettings = (struct ServerSettings)SERVER_SETTINGS_DEFAULTS;
-    gServerSettings.maxPlayers = configAmountOfPlayers;
+    gServerSettings.maxPlayers = MAX_PLAYERS;
     gServerSettings.skipIntro = gCLIOpts.skipIntro ? TRUE : FALSE; // ?args=--skip-intro, for tests
 #else
     gServerSettings.playerInteractions = configPlayerInteraction;
@@ -835,12 +835,12 @@ EMSCRIPTEN_KEEPALIVE const char* web_debug_server_settings(void) {
         "{\"networkType\":%d,\"playerInteractions\":%d,\"playerKnockbackStrength\":%d,\"stayInLevelAfterStar\":%d,"
         "\"bubbleDeath\":%d,\"nametags\":%d,\"pauseAnywhere\":%d,\"pvpType\":%d,\"bouncyLevelBounds\":%d,"
         "\"skipIntro\":%d,\"maxPlayers\":%d,\"enablePlayerList\":%d,\"enablePlayersInLevelDisplay\":%d,"
-        "\"configPlayerInteraction\":%u,\"configBubbleDeath\":%d}",
+        "\"configPlayerInteraction\":%u,\"configBubbleDeath\":%d,\"configAmountOfPlayers\":%u}",
         gNetworkType, gServerSettings.playerInteractions, gServerSettings.playerKnockbackStrength,
         gServerSettings.stayInLevelAfterStar, gServerSettings.bubbleDeath, gServerSettings.nametags,
         gServerSettings.pauseAnywhere, gServerSettings.pvpType, gServerSettings.bouncyLevelBounds,
         gServerSettings.skipIntro, gServerSettings.maxPlayers, gServerSettings.enablePlayerList,
-        gServerSettings.enablePlayersInLevelDisplay, configPlayerInteraction, configBubbleDeath);
+        gServerSettings.enablePlayersInLevelDisplay, configPlayerInteraction, configBubbleDeath, configAmountOfPlayers);
     return json;
 }
 #endif
