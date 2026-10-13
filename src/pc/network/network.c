@@ -77,20 +77,24 @@ u32 sNetworkReconnectTimer = 0;
 u32 sNetworkRehostTimer = 0;
 enum NetworkSystemType sNetworkReconnectType = NS_SOCKET;
 
-struct ServerSettings gServerSettings = {
-    .playerInteractions = PLAYER_INTERACTIONS_SOLID,
-    .bouncyLevelBounds = BOUNCY_LEVEL_BOUNDS_OFF,
-    .playerKnockbackStrength = 25,
-    .skipIntro = FALSE,
-    .bubbleDeath = TRUE,
-    .enablePlayersInLevelDisplay = TRUE,
-    .enablePlayerList = TRUE,
-    .headlessServer = FALSE,
-    .nametags = TRUE,
-    .maxPlayers = MAX_PLAYERS,
-    .pauseAnywhere = FALSE,
-    .pvpType = PLAYER_PVP_CLASSIC,
-};
+// Stock coopdx server settings (the same values as the configfile.c defaults).
+#define SERVER_SETTINGS_DEFAULTS { \
+    .playerInteractions = PLAYER_INTERACTIONS_SOLID, \
+    .bouncyLevelBounds = BOUNCY_LEVEL_BOUNDS_OFF, \
+    .playerKnockbackStrength = 25, \
+    .stayInLevelAfterStar = 0, \
+    .skipIntro = FALSE, \
+    .bubbleDeath = TRUE, \
+    .enablePlayersInLevelDisplay = TRUE, \
+    .enablePlayerList = TRUE, \
+    .headlessServer = FALSE, \
+    .nametags = TRUE, \
+    .maxPlayers = MAX_PLAYERS, \
+    .pauseAnywhere = FALSE, \
+    .pvpType = PLAYER_PVP_CLASSIC, \
+}
+
+struct ServerSettings gServerSettings = SERVER_SETTINGS_DEFAULTS;
 
 struct NametagsSettings gNametagsSettings = {
     .showHealth = false,
@@ -131,6 +135,13 @@ bool network_init(enum NetworkType inNetworkType, bool reconnecting) {
     crash_handler_init();
 
     // set server settings
+#ifdef TARGET_WEB
+    // The Activity always plays by stock rules: it has no host panel, so settings saved by an earlier
+    // build must not change them. The saved config itself is left alone; only the player limit is used.
+    gServerSettings = (struct ServerSettings)SERVER_SETTINGS_DEFAULTS;
+    gServerSettings.maxPlayers = configAmountOfPlayers;
+    gServerSettings.skipIntro = gCLIOpts.skipIntro ? TRUE : FALSE; // ?args=--skip-intro, for tests
+#else
     gServerSettings.playerInteractions = configPlayerInteraction;
     gServerSettings.bouncyLevelBounds = configBouncyLevelBounds;
     gServerSettings.playerKnockbackStrength = configPlayerKnockbackStrength;
@@ -144,6 +155,7 @@ bool network_init(enum NetworkType inNetworkType, bool reconnecting) {
     gServerSettings.pauseAnywhere = configPauseAnywhere;
     gServerSettings.pvpType = configPvpType;
     gServerSettings.headlessServer = gCLIOpts.headless && (inNetworkType == NT_SERVER);
+#endif
 
     gNametagsSettings.showHealth = false;
     gNametagsSettings.showSelfTag = false;
@@ -813,3 +825,22 @@ void network_shutdown(bool sendLeaving, bool exiting, bool popup, bool reconnect
 
     djui_reset_popup_disabled_override();
 }
+
+#ifdef WEB_TEST_HOOKS
+#include <emscripten.h>
+// Test hook (WEB_TEST_HOOKS builds only): the server settings in effect, as JSON.
+EMSCRIPTEN_KEEPALIVE const char* web_debug_server_settings(void) {
+    static char json[512];
+    snprintf(json, sizeof(json),
+        "{\"networkType\":%d,\"playerInteractions\":%d,\"playerKnockbackStrength\":%d,\"stayInLevelAfterStar\":%d,"
+        "\"bubbleDeath\":%d,\"nametags\":%d,\"pauseAnywhere\":%d,\"pvpType\":%d,\"bouncyLevelBounds\":%d,"
+        "\"skipIntro\":%d,\"maxPlayers\":%d,\"enablePlayerList\":%d,\"enablePlayersInLevelDisplay\":%d,"
+        "\"configPlayerInteraction\":%u,\"configBubbleDeath\":%d}",
+        gNetworkType, gServerSettings.playerInteractions, gServerSettings.playerKnockbackStrength,
+        gServerSettings.stayInLevelAfterStar, gServerSettings.bubbleDeath, gServerSettings.nametags,
+        gServerSettings.pauseAnywhere, gServerSettings.pvpType, gServerSettings.bouncyLevelBounds,
+        gServerSettings.skipIntro, gServerSettings.maxPlayers, gServerSettings.enablePlayerList,
+        gServerSettings.enablePlayersInLevelDisplay, configPlayerInteraction, configBubbleDeath);
+    return json;
+}
+#endif
