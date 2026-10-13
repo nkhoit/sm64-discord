@@ -124,7 +124,8 @@ audio indicators only; it never prints raw reports or ticket values. Treat remot
 
 ## Static files
 
-Only `index.html`, `boot.js` and `vendor/` (the Discord SDK) are public. Every other file (the engine:
+Only `index.html`, `boot.js`, `vendor/` (the Discord SDK) and `favicon.ico` (browsers request it
+without the session; the page itself declares no icon file) are public. Every other file (the engine:
 `sm64coopdx.js/.wasm/.data`, and `app.js`, `diagnostics.js`) needs an **asset session** as `?s=`:
 without one the answer is `401`, with a bad, forged or expired one `403`, both `Cache-Control:
 no-store`. The page gets a session from `POST /api/assets`:
@@ -145,6 +146,12 @@ A cookie there would need `SameSite=None; Secure; Partitioned`, depend on the pr
 `Set-Cookie` and `Cookie` through unchanged, and on the browser not blocking third-party cookies.
 A signed URL parameter works through any proxy, and Emscripten fetches the `.wasm` and `.data` by
 URL (`locateFile`), so it carries the session without special handling.
+
+**What this protects, and what it doesn't.** A session is not tied to a user: everyone who signs in
+during the same window gets the same one, and any URL that carries it (for example copied out of the
+browser's developer tools) works for anyone until it expires, up to 90 minutes. It keeps casual
+downloaders and crawlers from pulling the game files off the relay; it is not per-user access control.
+Rotating `SM64_ASSET_SECRET` (and restarting) invalidates every session at once.
 
 Engine files are answered with `Cache-Control: private, no-cache` so no shared cache (such as
 Cloudflare's) keeps a copy for others; the public files with `no-cache`. Both carry an ETag.

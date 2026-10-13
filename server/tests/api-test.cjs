@@ -75,6 +75,7 @@ async function startRelay(www, env, expectExit = false) {
   const data = fs.mkdtempSync(path.join(os.tmpdir(), 'api-test-relay-'));
   const child = spawn(binary, ['--port', String(port), '--www', www, '--data', data],
                       { env: { PATH: process.env.PATH, ...env }, stdio: ['ignore', 'pipe', 'pipe'] });
+  process.on('exit', () => child.kill()); // also when a check throws before the test stops it
   let stderr = '';
   child.stderr.on('data', (d) => { stderr += d; });
   child.stdout.on('data', () => {});
@@ -261,6 +262,11 @@ function silentPeer(ticket) {
         check(`public ${url} is served without a session${label}`, r.status === 200 && r.headers['cache-control'] === 'no-cache', r.status);
       }
     }
+  }
+  // browsers ask for /favicon.ico by themselves, without ?s=: a missing one is a plain 404, not a 401
+  for (const url of ['/favicon.ico', '/.proxy/favicon.ico']) {
+    const r = await raw(`${baseAuth}${url}`);
+    check(`${url} without a session is 404 (public, not in the web root), not 401`, r.status === 404, r.status);
   }
   const nowSec = Math.floor(Date.now() / 1000);
   const tamperedSig = good.slice(0, -1) + (good.endsWith('0') ? '1' : '0');

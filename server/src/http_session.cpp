@@ -32,10 +32,11 @@ const char* mime_type(const std::filesystem::path& path) {
     return nullptr;
 }
 
-// The only files anyone may fetch: the page and the code that signs in. Everything else (the
-// engine, the page's own game code) needs an asset session from POST /api/assets as ?s=.
+// The only files anyone may fetch: the page, the code that signs in, and favicon.ico (browsers ask
+// for it on their own, without ?s=). Everything else (the engine, the page's own game code) needs an
+// asset session from POST /api/assets as ?s=.
 bool is_public_file(const std::filesystem::path& relative) {
-    if (relative == "index.html" || relative == "boot.js") { return true; }
+    if (relative == "index.html" || relative == "boot.js" || relative == "favicon.ico") { return true; }
     auto first = relative.begin();
     return first != relative.end() && *first == "vendor" && std::next(first) != relative.end();
 }

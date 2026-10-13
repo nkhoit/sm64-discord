@@ -21,7 +21,7 @@ If you built `TARGET_WEB=1` before release builds dropped debug info, run `rm -r
 relinked into the 60 MB debug `.wasm`. Check that `sm64coopdx.wasm` is about 32 MB.
 
 For co-op, serve it with the relay instead (see `server/README.md`). The relay serves only
-`index.html`, `web/boot.js` and `vendor/` to anyone: `boot.js` signs in, gets an asset session and then
+`index.html`, `web/boot.js`, `vendor/` and `favicon.ico` to anyone: `boot.js` signs in, gets an asset session and then
 loads the game files (`sm64coopdx.*`, `app.js`, `diagnostics.js`) with it. The page (`web/app.js`)
 has two modes:
 
