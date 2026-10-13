@@ -20,14 +20,14 @@ From the repository root:
 make -j"$(nproc)" TARGET_WEB=1 WEB_TEST_HOOKS=1 web-dist
 # 2. the relay
 cmake -S server -B server/build -DCMAKE_BUILD_TYPE=Release && cmake --build server/build -j"$(nproc)"
-# 3. Playwright with full Chromium
-npm i playwright && npx playwright install chromium
+# 3. Playwright with full Chromium (installed into web/tests/labs/node_modules)
+(cd web/tests/labs && npm install && npx playwright install chromium)
 # 4. the labs, with your own ROM (it is only read, never copied into the repo)
 ROM=path/to/baserom.us.z64 web/tests/labs/run-labs.sh controls   # or: pause, all
 ```
 
 `run-labs.sh` starts the relay (and, for the pause lab, a second relay with a hosted ROM plus the mock
-Discord API from `server/tests/mock_discord.py`) on `PORT`..`PORT+2` (default 8124). It runs the lab and
+Discord API from `server/tests/mock_discord.py`) on `127.0.0.1`, ports `PORT`..`PORT+2` (default 8124). It runs the lab and
 stops everything when done. Results (`*-results.json`, logs, screenshots) go to `OUT`
 (default `$TMPDIR/sm64-labs`). `RELAY` and `DIST` override the relay binary and the build directory.
 The script exits non-zero if a check fails.

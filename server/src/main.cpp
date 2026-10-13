@@ -1,6 +1,6 @@
 // sm64-relay: serves the browser build and relays co-op packets between players.
 //
-//   sm64-relay [--port 8080] [--www build/us_web] [--data relay-data] [--allow-lan-test]
+//   sm64-relay [--port 8080] [--bind 0.0.0.0] [--www build/us_web] [--data relay-data] [--allow-lan-test]
 //
 // Discord sign-in is enabled by DISCORD_CLIENT_ID and DISCORD_CLIENT_SECRET in the environment.
 // --allow-lan-test lets browsers on the local network play without Discord; keep it off on a public VM.
@@ -139,10 +139,13 @@ bool configure_hosted_rom(Config& config, const std::string& guildIds, std::stri
 int main(int argc, char* argv[]) {
     Config config;
     std::filesystem::path cliRomPath;
+    std::string bindAddress = "0.0.0.0"; // all IPv4 interfaces
     for (int i = 1; i < argc; i++) {
         std::string arg = argv[i];
         if (arg == "--port" && i + 1 < argc) {
             config.port = static_cast<unsigned short>(std::atoi(argv[++i]));
+        } else if (arg == "--bind" && i + 1 < argc) {
+            bindAddress = argv[++i];
         } else if (arg == "--www" && i + 1 < argc) {
             config.wwwRoot = argv[++i];
         } else if (arg == "--data" && i + 1 < argc) {
@@ -152,7 +155,7 @@ int main(int argc, char* argv[]) {
         } else if (arg == "--allow-lan-test") {
             config.allowLanTest = true;
         } else {
-            std::cerr << "usage: sm64-relay [--port 8080] [--www build/us_web] [--data relay-data] [--rom FILE] [--allow-lan-test]\n";
+            std::cerr << "usage: sm64-relay [--port 8080] [--bind 0.0.0.0] [--www build/us_web] [--data relay-data] [--rom FILE] [--allow-lan-test]\n";
             return 1;
         }
     }
@@ -165,6 +168,13 @@ int main(int argc, char* argv[]) {
     std::string configError;
     if (!configure_hosted_rom(config, env("DISCORD_GUILD_IDS"), configError)) {
         std::cerr << "configuration error: " << configError << "\n";
+        return 1;
+    }
+
+    boost::system::error_code addressError;
+    const auto listenAddress = asio::ip::make_address(bindAddress, addressError);
+    if (addressError) {
+        std::cerr << "configuration error: --bind needs an IP address, got \"" << bindAddress << "\"\n";
         return 1;
     }
 
@@ -189,13 +199,13 @@ int main(int argc, char* argv[]) {
     asio::io_context io;
     Relay relay;
     Api api(config, relay, io.get_executor());
-    tcp::acceptor acceptor(io, tcp::endpoint(tcp::v4(), config.port));
+    tcp::acceptor acceptor(io, tcp::endpoint(listenAddress, config.port));
     do_accept(acceptor, relay, api, config.wwwRoot);
 
     asio::signal_set signals(io, SIGINT, SIGTERM);
     signals.async_wait([&io](boost::system::error_code, int) { io.stop(); });
 
-    std::cout << "sm64-relay listening on port " << config.port << ", serving " << config.wwwRoot
+    std::cout << "sm64-relay listening on " << bindAddress << " port " << config.port << ", serving " << config.wwwRoot
               << (config.discordClientId.empty() || config.discordClientSecret.empty() ? ", Discord sign-in off" : ", Discord sign-in on")
               << (config.romBytes.empty() ? ", hosted ROM off" : ", hosted ROM on")
               << (config.allowLanTest ? ", LAN test mode ON" : "") << std::endl;

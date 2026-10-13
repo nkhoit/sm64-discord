@@ -1,0 +1,8 @@
+{
+  "name": "sm64-discord-browser-labs",
+  "private": true,
+  "description": "Browser labs for the web build; see README.md",
+  "devDependencies": {
+    "playwright": "^1.48.0"
+  }
+}

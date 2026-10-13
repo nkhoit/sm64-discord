@@ -24,6 +24,7 @@ DISCORD_CLIENT_ID=... DISCORD_CLIENT_SECRET=... \
 | Option | Meaning |
 | --- | --- |
 | `--port` | HTTP and WebSocket port (default 8080) |
+| `--bind` | IP address to listen on (default `0.0.0.0`, every IPv4 interface; `127.0.0.1` for local-only, as the browser labs use) |
 | `--www` | the browser build to serve (default `build/us_web`). Only `.html .js .wasm .data .css .png .ico .json` files are served, so build objects next to them never are. |
 | `--data` | where saves and diagnostic reports are kept (default `relay-data`; see [Saves](#saves) and [Diagnostics](#diagnostics-and-privacy)) |
 | `--rom` | optional absolute hosted ROM path when `SM64_ROM_PATH` is unset; environment variable takes precedence |
