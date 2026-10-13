@@ -101,7 +101,8 @@ Release builds have no debug info. For debugging, `make clean` first (flags aren
 - "Direct connection" networking uses `src/pc/network/websocket/` instead of UDP sockets.
 - `Module._web_debug_players()` returns the connected players, names and positions as JSON (used by `web/tests/coop-test.cjs`).
 - `Module._web_debug_controls(preset)` (only in builds made with `WEB_TEST_HOOKS=1`) sets the control preset (0 Classic, 1 Mouse + Keyboard, -1 only reports) and returns
-  preset, camera and pointer-lock state as JSON (used by the mouse+keyboard lab).
+  preset, camera and pointer-lock state as JSON (used by `web/tests/labs/controls-lab.mjs`; see `web/tests/labs/README.md`
+  for the browser labs).
 - `Module._web_debug_stats()` returns game ticks (30 per second is normal speed), drawn frames, time per
   tick and the audio queue as JSON (used by `web/tests/perf-test.cjs`).
 - In the browser the main loop waits for `requestAnimationFrame` and draws frames until the next 30 Hz
