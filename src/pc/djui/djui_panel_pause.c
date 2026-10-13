@@ -17,6 +17,19 @@
 
 bool gDjuiPanelPauseCreated = false;
 
+#ifdef TARGET_WEB
+// In the Discord Activity the relay picks the host and a session ends when the player closes the
+// Activity, so the pause menu has no Server Settings, Stop Hosting or Disconnect (nor the disconnect key).
+#define PAUSE_MENU_HOST_BUTTONS 0
+#else
+#define PAUSE_MENU_HOST_BUTTONS 1
+#endif
+
+#ifdef WEB_TEST_HOOKS
+static struct DjuiBase* sWebPauseBody = NULL;
+static struct DjuiBase* sWebPauseDefault = NULL;
+#endif
+
 static void djui_panel_pause_resume(UNUSED struct DjuiBase* caller) {
     djui_panel_shutdown();
 }
@@ -27,6 +40,7 @@ void djui_panel_pause_quit_yes(UNUSED struct DjuiBase* caller) {
 }
 
 void djui_panel_pause_disconnect_key_update(int scancode) {
+#if PAUSE_MENU_HOST_BUTTONS
     if (gDjuiInMainMenu || find_object_with_behavior(bhvActSelector) != NULL) { return; }
 
     for (int i = 0; i < MAX_BINDS; i++) {
@@ -34,8 +48,12 @@ void djui_panel_pause_disconnect_key_update(int scancode) {
             djui_panel_pause_quit_yes(NULL);
         }
     }
+#else
+    (void)scancode;
+#endif
 }
 
+#if PAUSE_MENU_HOST_BUTTONS
 static void djui_panel_pause_quit(struct DjuiBase* caller) {
     if (gMarioStates[0].action == ACT_PUSHING_DOOR || gMarioStates[0].action == ACT_PULLING_DOOR) { return; }
 
@@ -51,6 +69,7 @@ static void djui_panel_pause_quit(struct DjuiBase* caller) {
                                 djui_panel_pause_quit_yes);
     }
 }
+#endif
 
 void djui_panel_pause_create(struct DjuiBase* caller) {
     if (gDjuiPanelPauseCreated) { return; }
@@ -69,11 +88,13 @@ void djui_panel_pause_create(struct DjuiBase* caller) {
         struct DjuiButton* button3 = djui_button_create(body, DLANG(PAUSE, OPTIONS), DJUI_BUTTON_STYLE_NORMAL, djui_panel_options_create);
         defaultBase = &button3->base;
 
+#if PAUSE_MENU_HOST_BUTTONS
         if (gNetworkType == NT_SERVER) {
             djui_button_create(body, DLANG(PAUSE, SERVER_SETTINGS), DJUI_BUTTON_STYLE_NORMAL, djui_panel_host_create);
         } else {
             djui_button_create(body, DLANG(PAUSE, SERVER_SETTINGS), DJUI_BUTTON_STYLE_NORMAL, djui_panel_client_server_settings_create);
         }
+#endif
 
         struct Mod* addedMods[MAX_HOOKED_MOD_MENU_ELEMENTS] = { 0 };
         int modCount = 0;
@@ -109,14 +130,44 @@ void djui_panel_pause_create(struct DjuiBase* caller) {
 
         djui_button_create(body, DLANG(PAUSE, RESUME), DJUI_BUTTON_STYLE_NORMAL, djui_panel_pause_resume);
 
+#if PAUSE_MENU_HOST_BUTTONS
         if (gNetworkType == NT_SERVER) {
             djui_button_create(body, DLANG(PAUSE, STOP_HOSTING), DJUI_BUTTON_STYLE_BACK, djui_panel_pause_quit);
         } else {
             djui_button_create(body, DLANG(PAUSE, DISCONNECT), DJUI_BUTTON_STYLE_BACK, djui_panel_pause_quit);
         }
+#endif
     }
 
+#ifdef WEB_TEST_HOOKS
+    sWebPauseBody = body;
+    sWebPauseDefault = defaultBase;
+#endif
     djui_panel_add(caller, panel, defaultBase);
     gInteractableOverridePad = true;
     gDjuiPanelPauseCreated = true;
 }
+
+#ifdef WEB_TEST_HOOKS
+#include <emscripten.h>
+static void web_pause_list_buttons(struct DjuiBase* base, char* out, size_t size) {
+    for (struct DjuiBaseChild* c = base->child; c != NULL; c = c->next) {
+        if (c->base->interactable == NULL) { web_pause_list_buttons(c->base, out, size); continue; }
+        struct DjuiButton* button = (struct DjuiButton*)c->base;
+        size_t len = strlen(out);
+        snprintf(out + len, size - len, "%s\"%s%s\"", out[len - 1] == '[' ? "" : ",",
+                 c->base == sWebPauseDefault ? "*" : "", button->text ? button->text->message : "");
+    }
+}
+
+// Test hook (WEB_TEST_HOOKS builds only): the open pause menu's button labels as a JSON array, the
+// default (focused) one prefixed with "*". "null" while the pause menu isn't open.
+EMSCRIPTEN_KEEPALIVE const char* web_debug_pause_buttons(void) {
+    static char json[1024];
+    if (!gDjuiPanelPauseCreated || sWebPauseBody == NULL) { return "null"; }
+    snprintf(json, sizeof(json), "[");
+    web_pause_list_buttons(sWebPauseBody, json, sizeof(json) - 1);
+    strcat(json, "]");
+    return json;
+}
+#endif
