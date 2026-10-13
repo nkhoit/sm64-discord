@@ -1,0 +1,14 @@
+# systemd user unit: ~/.config/systemd/user/sm64-relay.service
+# Files come from deploy/deploy.sh (PREFIX=~/sm64). Players reach it through a tunnel or reverse proxy. It listens on
+# 0.0.0.0:8080, so it is also reachable on the LAN unless firewalled; harmless without --allow-lan-test.
+[Unit]
+Description=sm64-relay: Super Mario 64 co-op Discord Activity
+
+[Service]
+EnvironmentFile=%h/.config/sm64-relay/env
+ExecStart=%h/sm64/bin/sm64-relay --port 8080 --www %h/sm64/www --data %h/sm64/data
+Restart=on-failure
+RestartSec=2
+
+[Install]
+WantedBy=default.target

@@ -1,0 +1,131 @@
+name: Web build and relay
+
+on:
+    workflow_dispatch:
+    push:
+        branches: [ main ]
+    pull_request:
+        branches: [ main ]
+
+permissions:
+    contents: read
+
+jobs:
+    relay:
+        runs-on: ubuntu-24.04
+        steps:
+            - name: Checkout repository
+              uses: actions/checkout@v7
+
+            # api-test.cjs uses the built-in WebSocket (Node 22+)
+            - name: Set up Node
+              uses: actions/setup-node@v7
+              with:
+                node-version: '24'
+
+            - name: Install dependencies
+              run: |
+                sudo apt-get update
+                sudo apt-get install -y cmake g++ libboost-dev libssl-dev
+
+            - name: Build the relay
+              run: |
+                cmake -S server -B server/build -DCMAKE_BUILD_TYPE=Release -Wno-dev
+                cmake --build server/build -j"$(nproc)"
+
+            # Takes ~35 s: the keepalive checks wait for the relay's ping and idle timeouts.
+            - name: API tests
+              timeout-minutes: 5
+              run: |
+                # the second relay serves a scratch directory that api-test.cjs fills with static file fixtures
+                mkdir -p "$RUNNER_TEMP/relay-www-2"
+                python3 server/tests/mock_discord.py 8199 &
+                DISCORD_CLIENT_ID=1 DISCORD_CLIENT_SECRET=mock-secret DISCORD_API_BASE=http://127.0.0.1:8199 \
+                    server/build/sm64-relay --port 8124 --www web --data "$RUNNER_TEMP/relay-data" --allow-lan-test &
+                server/build/sm64-relay --port 8125 --www "$RUNNER_TEMP/relay-www-2" --data "$RUNNER_TEMP/relay-data-2" &
+                for port in 8199 8124 8125; do
+                    timeout 10 bash -c "until (echo > /dev/tcp/127.0.0.1/$port) 2>/dev/null; do sleep 0.2; done"
+                done
+                node server/tests/api-test.cjs http://127.0.0.1:8124 http://127.0.0.1:8125 \
+                    "$RUNNER_TEMP/relay-data" "$RUNNER_TEMP/relay-www-2"
+
+            - name: Owner diagnostics summary CLI tests
+              run: python3 server/tests/diagnostics-summary-test.py
+
+            - name: Authenticated diagnostics ingestion
+              timeout-minutes: 3
+              run: |
+                TMPDIR="$RUNNER_TEMP" node server/tests/diagnostics-runner.cjs server/build/sm64-relay
+
+            - name: Client diagnostics tests
+              run: node web/tests/diagnostics-test.cjs
+
+            - name: Hosted ROM source-only tests
+              timeout-minutes: 3
+              run: |
+                TMPDIR="$RUNNER_TEMP" ctest --test-dir server/build --output-on-failure
+                TMPDIR="$RUNNER_TEMP" node server/tests/hosted-rom-config-test.cjs server/build/sm64-relay
+                node web/tests/hosted-rom-bootstrap-test.cjs
+                node web/tests/dist-version-test.cjs
+                TMPDIR="$RUNNER_TEMP" node server/tests/hosted-rom-runner.cjs server/build/sm64-relay
+
+            - name: Upload the relay
+              uses: actions/upload-artifact@v7
+              with:
+                name: sm64-relay-ubuntu-24.04
+                path: server/build/sm64-relay
+
+    web:
+        runs-on: ubuntu-24.04
+        env:
+            EMSDK_VERSION: 6.0.12
+        steps:
+            - name: Checkout repository
+              uses: actions/checkout@v7
+
+            # The build doesn't read the ROM: assets are extracted from it in the browser at runtime.
+            - name: Restore emsdk
+              id: emsdk
+              uses: actions/cache/restore@v6
+              with:
+                path: ~/emsdk
+                key: emsdk-${{ env.EMSDK_VERSION }}-${{ runner.os }}
+
+            - name: Install emsdk
+              if: steps.emsdk.outputs.cache-hit != 'true'
+              run: |
+                git clone --depth 1 https://github.com/emscripten-core/emsdk.git ~/emsdk
+                ~/emsdk/emsdk install "$EMSDK_VERSION"
+                ~/emsdk/emsdk activate "$EMSDK_VERSION"
+                # shellcheck source=/dev/null
+                source ~/emsdk/emsdk_env.sh
+                embuilder build sdl2 zlib
+
+            - name: Save emsdk
+              if: steps.emsdk.outputs.cache-hit != 'true'
+              uses: actions/cache/save@v6
+              with:
+                path: ~/emsdk
+                key: emsdk-${{ env.EMSDK_VERSION }}-${{ runner.os }}
+
+            - name: Build the web release
+              run: |
+                # shellcheck source=/dev/null
+                source ~/emsdk/emsdk_env.sh
+                make -j"$(nproc)" TARGET_WEB=1 web-dist
+                node web/tests/dist-version-test.cjs build/us_web/dist
+
+            - name: Report sizes
+              run: |
+                cd build/us_web/dist
+                echo '| File | Bytes | gzip -9 |' >> "$GITHUB_STEP_SUMMARY"
+                echo '| --- | ---: | ---: |' >> "$GITHUB_STEP_SUMMARY"
+                find . -type f | sort | while read -r f; do
+                    echo "| ${f#./} | $(stat -c%s "$f") | $(gzip -9c "$f" | wc -c) |" >> "$GITHUB_STEP_SUMMARY"
+                done
+
+            - name: Upload the web release
+              uses: actions/upload-artifact@v7
+              with:
+                name: web-dist
+                path: build/us_web/dist

@@ -1,0 +1,13 @@
+# systemd user unit: ~/.config/systemd/user/sm64-tunnel.service
+# Cloudflare tunnel "sm64": sm64.example.com -> http://127.0.0.1:8080 (see cloudflared-tunnel.yml).
+[Unit]
+Description=Cloudflare tunnel for sm64-relay
+After=sm64-relay.service
+
+[Service]
+ExecStart=/usr/local/bin/cloudflared tunnel --no-autoupdate --config %h/.cloudflared/sm64.yml run sm64
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=default.target

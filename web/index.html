@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>sm64coopdx web</title>
+<style>
+  :root { color-scheme: dark; }
+  html, body { margin: 0; height: 100%; background: #000; color: #ddd; font: 14px system-ui, sans-serif; }
+  #canvas { display: block; width: 100vw; height: 100vh; outline: none; }
+  #overlay { position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center;
+             justify-content: center; gap: 12px; background: #111; text-align: center; padding: 16px; }
+  #overlay[hidden], #overlay [hidden] { display: none; }
+  #status, #countdown { color: #aaa; max-width: 32em; }
+  #debug-panel-host { position: fixed; top: 12px; right: 12px; z-index: 50; color: #e8eef7;
+                      font: 13px/1.4 system-ui, sans-serif; pointer-events: none; }
+  #debug-panel-host, #debug-panel-host * { box-sizing: border-box; }
+  #debug-panel-host[hidden] { display: none; }
+  #debug-toggle, #debug-panel { pointer-events: auto; }
+  #debug-toggle { border: 1px solid #40536d; border-radius: 999px; padding: 7px 13px; color: #e8f1ff;
+                  background: #111c2bd9; font: inherit; font-weight: 650; cursor: pointer; }
+  #debug-toggle:hover { border-color: #73b8ff; background: #192b41; }
+  #debug-reporting-controls { width: min(300px, calc(100vw - 24px)); margin-top: 6px; padding: 7px 9px; pointer-events: auto;
+                              border: 1px solid #354963; border-radius: 10px; background: #101720e8;
+                              box-shadow: 0 8px 24px #0008; font-size: 11px; }
+  #debug-reporting-notice { margin: 0 0 3px; color: #c2d2e4; }
+  #debug-reporting-controls label { display: flex; align-items: center; gap: 7px; min-height: 26px; cursor: pointer; }
+  #debug-reporting-controls input { accent-color: #66b7ff; }
+  #debug-toggle:focus-visible, #debug-panel button:focus-visible, #debug-panel input:focus-visible {
+    outline: 2px solid #82c6ff; outline-offset: 2px; }
+  #debug-reporting-controls input:focus-visible { outline: 2px solid #82c6ff; outline-offset: 2px; }
+  #debug-panel { width: min(380px, calc(100vw - 24px)); max-height: min(78vh, 700px); overflow: auto;
+                 margin-top: 8px; padding: 14px; border: 1px solid #354963; border-radius: 14px;
+                 background: #101720f2; box-shadow: 0 14px 38px #000b; backdrop-filter: blur(14px); }
+  #debug-panel[hidden] { display: none; }
+  #debug-panel h2 { margin: 0 0 8px; font-size: 17px; letter-spacing: .01em; }
+  #debug-panel h3 { margin: 12px 0 5px; color: #9acbff; font-size: 13px; }
+  #debug-panel p { margin: 7px 0; color: #b7c3d2; font-size: 12px; }
+  #debug-panel #debug-privacy-notice { padding: 8px; border-left: 2px solid #78bfff; background: #182534; }
+  #debug-panel #debug-upload-status { min-height: 1.5em; color: #d5e5f8; overflow-wrap: anywhere; }
+  #debug-panel label { display: flex; align-items: center; gap: 8px; min-height: 34px; cursor: pointer; }
+  #debug-panel input { accent-color: #66b7ff; }
+  #debug-panel dl { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 3px 12px; margin: 0;
+                    padding: 7px 9px; border: 1px solid #29394d; border-radius: 8px; background: #131e2a; }
+  #debug-panel dt { color: #a9b7c8; }
+  #debug-panel dd { margin: 0; color: #f0f5fc; font-variant-numeric: tabular-nums; text-align: right; }
+  #debug-report-buttons { display: flex; flex-wrap: wrap; gap: 6px; }
+  #debug-report-buttons button { border: 1px solid #405979; border-radius: 7px; padding: 6px 8px; color: #eaf4ff;
+                                background: #1a2b40; font: inherit; cursor: pointer; }
+  #debug-report-buttons button:hover:not(:disabled) { background: #254569; }
+  #debug-report-buttons button:disabled { opacity: .48; cursor: not-allowed; }
+  @media (max-width: 520px) { #debug-panel-host { top: 8px; right: 8px; } #debug-reporting-controls { width: min(260px, calc(100vw - 16px)); } }
+</style>
+</head>
+<body>
+<canvas id="canvas" tabindex="-1" oncontextmenu="event.preventDefault()"></canvas>
+<div id="debug-panel-host"></div>
+<div id="overlay">
+  <h1>Super Mario 64 co-op</h1>
+  <div id="rom-picker" hidden>
+    <p>Pick your own US Super Mario 64 ROM (.z64). It stays in this browser.</p>
+    <input id="rom-input" type="file" accept=".z64">
+  </div>
+  <div id="closed" hidden>
+    <p id="closed-reason"></p>
+    <p id="countdown"></p>
+    <button id="reload">Rejoin</button>
+  </div>
+  <p id="status">Loading…</p>
+</div>
+<script>
+  // The game runtime loads in parallel with sign-in; app.js waits on this before touching the file system.
+  // INVOKE_RUN=0, so the game only starts when app.js calls callMain.
+  // Release id, filled in by web/version-dist.py at `make web-dist` (empty when served from web/ directly).
+  window.BUILD_ID = '';
+  let resolveRuntime;
+  window.runtimeReady = new Promise((resolve) => { resolveRuntime = resolve; });
+  var Module = {
+    canvas: document.getElementById('canvas'),
+    print: (text) => console.log(text),
+    printErr: (text) => console.warn(text),
+    preRun: [() => { Module.FS.mkdirTree('/app/mods'); }],
+    onRuntimeInitialized: () => resolveRuntime(),
+    // .wasm and .data get the same release id as sm64coopdx.js, so all three always come from one build
+    locateFile: (path, prefix) => prefix + path + (window.BUILD_ID ? '?v=' + window.BUILD_ID : ''),
+    setStatus: (text) => { if (text) { document.getElementById('status').textContent = text; } },
+  };
+</script>
+<script>
+  // Discord's mobile apps open the activity with platform=mobile. There are no touch controls yet, so
+  // don't download the game there; app.js shows a message instead.
+  {
+    const launch = new URLSearchParams(location.search);
+    if (!(launch.has('frame_id') && launch.get('platform') === 'mobile')) {
+      const game = document.createElement('script');
+      game.src = 'sm64coopdx.js';
+      game.async = false;
+      document.body.appendChild(game);
+    }
+  }
+</script>
+<script type="module" src="app.js"></script>
+</body>
+</html>

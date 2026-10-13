@@ -1,0 +1,13 @@
+# Example ~/.cloudflared/sm64.yml for a Cloudflare tunnel (used by sm64-tunnel.user.service).
+# Made once with:
+#   cloudflared tunnel login
+#   cloudflared tunnel create sm64          # writes ~/.cloudflared/<tunnel id>.json
+#   cloudflared tunnel route dns sm64 sm64.example.com
+# Replace sm64.example.com with your host name and the credentials path with the absolute path cloudflared printed.
+tunnel: sm64
+credentials-file: /path/to/your/home/.cloudflared/<tunnel id>.json
+
+ingress:
+  - hostname: sm64.example.com
+    service: http://127.0.0.1:8080
+  - service: http_status:404

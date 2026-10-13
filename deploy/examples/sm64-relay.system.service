@@ -1,0 +1,29 @@
+# systemd system unit: /etc/systemd/system/sm64-relay.service
+# Files come from deploy/deploy.sh (PREFIX=/opt/sm64). Keep port 8080 firewalled; only the reverse proxy
+# (Caddy or nginx on 443) should be reachable from outside.
+[Unit]
+Description=sm64-relay: Super Mario 64 co-op Discord Activity
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+User=sm64
+Group=sm64
+EnvironmentFile=/etc/sm64-relay/env
+ExecStart=/opt/sm64/bin/sm64-relay --port 8080 --www /opt/sm64/www --data /opt/sm64/data
+Restart=on-failure
+RestartSec=2
+
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+ReadWritePaths=/opt/sm64/data
+
+[Install]
+WantedBy=multi-user.target

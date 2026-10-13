@@ -1,0 +1,31 @@
+NOTICE
+
+This repository is a fork of sm64coopdx with a browser (WebAssembly) build, a relay server
+(server/) and a Discord Activity integration added on top.
+
+Upstream code
+-------------
+- sm64coopdx by the Coop Deluxe Team, https://github.com/coop-deluxe/sm64coopdx
+  Imported from upstream commit 8cd6e59 (as commit e3ff0d8 in this repository).
+  sm64coopdx continues sm64ex-coop by djoslin0 (https://github.com/djoslin0/sm64ex-coop) and
+  builds on the sm64ex PC port.
+- The Super Mario 64 decompilation project, https://github.com/n64decomp/sm64
+
+Licensing
+---------
+Upstream sm64coopdx and the Super Mario 64 decompilation are published without an open-source
+license. Accordingly, no open-source license is granted for that code by this repository, and
+nothing here relicenses it. Its rights remain with its respective authors.
+
+Third-party libraries bundled by upstream (under lib/ and elsewhere) keep their own licenses, as
+stated in their files.
+
+Nintendo
+--------
+This project is not affiliated with, endorsed by, or sponsored by Nintendo. Super Mario 64 and
+related names and characters are trademarks and copyrights of Nintendo. This repository contains no
+ROM and no extracted game assets; building or playing requires your own legally obtained copy of
+the game (a US Super Mario 64 ROM). Operators who enable hosted-ROM delivery (SM64_ROM_PATH) are
+solely responsible for having the right to share that copy with the users it is served to.
+
+Discord is a trademark of Discord Inc. This project is not affiliated with or endorsed by Discord.

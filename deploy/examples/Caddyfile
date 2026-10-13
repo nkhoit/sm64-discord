@@ -1,0 +1,14 @@
+# /etc/caddy/Caddyfile. Replace sm64.example.com with your host name (its DNS must point at this machine,
+# ports 80 and 443 open); Caddy gets the certificate itself.
+sm64.example.com {
+	# The relay sends files uncompressed; the .wasm is ~32 MB raw, ~7 MB gzipped.
+	encode zstd gzip {
+		match {
+			header Content-Type text/*
+			header Content-Type application/wasm*
+			header Content-Type application/json*
+			header Content-Type application/octet-stream*
+		}
+	}
+	reverse_proxy 127.0.0.1:8080
+}
