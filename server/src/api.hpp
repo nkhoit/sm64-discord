@@ -12,6 +12,7 @@
 #include <memory>
 #include <utility>
 
+#include "asset_auth.hpp"
 #include "config.hpp"
 #include "diagnostics_limits.hpp"
 #include "diagnostics_store.hpp"
@@ -24,6 +25,7 @@
 // The page's HTTP API:
 //   GET  /api/config               which modes the server supports, and the Discord client id
 //   POST /api/token   {code}       Discord OAuth2 code -> access token
+//   POST /api/assets {mode,...}    a short-lived session for the engine files (see AssetAuth)
 //   POST /api/session {mode,...}   a ticket for /ws, plus whether to host or join
 //   POST /api/diagnostics           authenticated, bounded technical report ingestion
 //   GET  /api/save?ticket=         the room's save (host only)
@@ -46,6 +48,7 @@ public:
 
     // `respond` is always called on the I/O executor.
     void handle(const Request& request, const boost::asio::ip::address& remote, bool viaProxy, Respond respond);
+    const AssetAuth& asset_auth() const noexcept { return mAssetAuth; }
     bool is_hosted_rom_file(std::uint64_t device, std::uint64_t inode) const noexcept {
         return mConfig.romSourceIdentityValid && mConfig.romSourceDevice == device && mConfig.romSourceInode == inode;
     }
@@ -53,6 +56,8 @@ public:
 private:
     void handle_token(const Request& request, Respond respond);
     void handle_session(const Request& request, const boost::asio::ip::address& remote, bool viaProxy, Respond respond);
+    void handle_assets(const Request& request, const boost::asio::ip::address& remote, bool viaProxy, Respond respond);
+    void send_asset_session(const Request& request, Respond respond);
     void handle_save(const Request& request, Respond respond);
     void handle_diagnostics(const Request& request, const boost::asio::ip::address& remote, bool viaProxy, Respond respond);
     void handle_rom(const Request& request, const boost::asio::ip::address& remote, bool viaProxy, Respond respond);
@@ -77,6 +82,7 @@ private:
 
     const Config& mConfig;
     Relay& mRelay;
+    AssetAuth mAssetAuth;
     DiscordApi mDiscord;
     SaveStore mSaves;
     DiagnosticsStore mDiagnosticsStore;

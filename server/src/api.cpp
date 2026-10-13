@@ -259,6 +259,7 @@ const char* role_name(Relay::Role role) {
 Api::Api(const Config& config, Relay& relay, boost::asio::any_io_executor ioExecutor)
     : mConfig(config),
       mRelay(relay),
+      mAssetAuth(config.assetSecret),
       mDiscord(config.discordApiBase, config.discordClientId, config.discordClientSecret),
       mSaves(config.dataDir),
       mDiagnosticsStore(config.dataDir, config.wwwRoot),
@@ -341,6 +342,8 @@ void Api::handle(const Request& request, const boost::asio::ip::address& remote,
         handle_diagnostics(request, remote, viaProxy, std::move(respond));
     } else if (path == "/api/token" && request.method() == http::verb::post) {
         handle_token(request, std::move(respond));
+    } else if (path == "/api/assets") {
+        handle_assets(request, remote, viaProxy, std::move(respond));
     } else if (path == "/api/session" && request.method() == http::verb::post) {
         handle_session(request, remote, viaProxy, std::move(respond));
     } else if (path == "/api/rom") {
@@ -554,6 +557,80 @@ void Api::handle_session(const Request& request, const boost::asio::ip::address&
             std::cout << "[g" << guildId << "] session for user " << v.user->id << "\n";
             finish("g" + guildId, name, v.user->id, std::move(respond));
         });
+}
+
+// The engine files (everything but the public bootstrap) need an asset session. It takes the same
+// proof as a game session: Discord membership of the launching server (which must be in
+// DISCORD_GUILD_IDS when that is set), or LAN test mode from the local network.
+void Api::handle_assets(const Request& request, const boost::asio::ip::address& remote, bool viaProxy, Respond respond) {
+    if (request.method() != http::verb::post) {
+        respond(error_response(request, http::status::method_not_allowed, "use POST"));
+        return;
+    }
+    auto body = parse_body(request);
+    if (!body) {
+        respond(error_response(request, http::status::bad_request, "expected a JSON body"));
+        return;
+    }
+    const std::string mode = json_string(*body, "mode");
+    if (mode == "lan") {
+        if (!mConfig.allowLanTest || viaProxy || !is_local_network(remote)) {
+            respond(error_response(request, http::status::forbidden, "open this activity from Discord"));
+            return;
+        }
+        send_asset_session(request, std::move(respond));
+        return;
+    }
+    if (mode != "discord" || mConfig.discordClientId.empty() || mConfig.discordClientSecret.empty()) {
+        respond(error_response(request, http::status::bad_request, "unsupported mode"));
+        return;
+    }
+    std::string token = json_string(*body, "access_token");
+    std::string guildId = json_string(*body, "guild_id");
+    if (token.empty() || !is_snowflake(guildId)) {
+        respond(error_response(request, http::status::bad_request, "launch this activity from a server"));
+        return;
+    }
+    if (!mConfig.discordGuildIds.empty() && !mConfig.discordGuildIds.count(guildId)) {
+        respond(error_response(request, http::status::forbidden, "this server is not enabled for this activity"));
+        return;
+    }
+
+    auto key = std::make_pair(token, guildId);
+    if (auto cached = mMembers.find(key); cached != mMembers.end() && cached->second.expires > std::chrono::steady_clock::now()) {
+        send_asset_session(request, std::move(respond));
+        return;
+    }
+    struct Verified {
+        std::optional<DiscordApi::User> user;
+        bool member = false;
+    };
+    if (!reserve_discord_call(request, respond)) { return; }
+    run_blocking(
+        mDiscordPool,
+        [this, token, guildId] {
+            Verified verified;
+            verified.user = mDiscord.get_user(token);
+            verified.member = verified.user && mDiscord.is_guild_member(token, guildId);
+            return verified;
+        },
+        [this, request, key, respond = std::move(respond)](Verified verified) mutable {
+            mPendingDiscordCalls--;
+            if (!verified.user || !verified.member) {
+                respond(error_response(request, http::status::forbidden, "could not verify your server membership"));
+                return;
+            }
+            remember_member(key, *verified.user);
+            send_asset_session(request, std::move(respond));
+        });
+}
+
+void Api::send_asset_session(const Request& request, Respond respond) {
+    const auto now = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::system_clock::now().time_since_epoch()).count();
+    const auto issued = mAssetAuth.issue(now);
+    respond(json_response(request, http::status::ok,
+                          json::object{{"session", issued.token}, {"expires_at", issued.expires},
+                                       {"expires_in", issued.expires - now}}));
 }
 
 void Api::handle_rom(const Request& request, const boost::asio::ip::address& remote, bool viaProxy, Respond respond) {

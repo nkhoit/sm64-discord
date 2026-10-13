@@ -6,7 +6,8 @@ const vm = require('vm');
 const { pathToFileURL } = require('node:url');
 const appPath = path.join(__dirname, '..', 'app.js');
 let source = fs.readFileSync(appPath, 'utf8');
-const diagnosticsImport = "import { createDiagnostics } from './diagnostics.js';";
+// boot.js loads diagnostics.js (with the asset session) and hands createDiagnostics to app.js.
+const diagnosticsImport = "const createDiagnostics = window.createDiagnostics;";
 let createDiagnostics;
 if (!source.includes(diagnosticsImport)) { throw new Error('production diagnostics import boundary changed; update this test to load the real module'); }
 source = source.replace(diagnosticsImport, '');
@@ -47,7 +48,7 @@ function response(status, payload, headers = {}) {
   };
 }
 
-async function runScenario({ search, hosted = false, romResult = 'ok', offline = false, stale = false, diagnosticsEnabled = true }) {
+async function runScenario({ search, hosted = false, romResult = 'ok', offline = false, stale = false, diagnosticsEnabled = true, bootRequest = undefined }) {
   const elements = new Map();
   for (const id of ['overlay', 'status', 'rom-picker', 'rom-input', 'closed', 'closed-reason', 'countdown', 'reload']) {
     elements.set(id, { id, hidden: id !== 'status', textContent: '', value: '', addEventListener: null, onclick: null });
@@ -125,7 +126,7 @@ async function runScenario({ search, hosted = false, romResult = 'ok', offline =
   };
   const windowListeners = new Map();
   const window = {
-    runtimeReady: Promise.resolve(), localStorage, AbortController,
+    runtimeReady: Promise.resolve(), localStorage, AbortController, bootRequest,
     addEventListener: (name, fn) => windowListeners.set(name, fn),
     removeEventListener: (name, fn) => { if (windowListeners.get(name) === fn) { windowListeners.delete(name); } },
   };
@@ -206,6 +207,14 @@ const routeIndex = (calls, ending) => calls.findIndex((call) => call.route.endsW
         network.calls.some((c) => c.route.endsWith('/api/rom')) && !network.calls.some((c) => c.route.endsWith('/api/session'))
         && network.mainArgs === null && network.elements.get('closed-reason').textContent.includes('reach the server'),
         network.elements.get('closed-reason').textContent);
+
+  const signedIn = await runScenario({ search: '?frame_id=boot&instance_id=test', hosted: true,
+    bootRequest: { mode: 'discord', access_token: 'boot-token', guild_id: GUILD } });
+  const signedInRom = signedIn.calls.find((c) => c.route.endsWith('/api/rom'));
+  check('a sign-in done by boot.js is reused (no second Discord authorization or token exchange)',
+        signedIn.mainArgs !== null && !signedIn.calls.some((c) => c.route.endsWith('/api/token'))
+        && signedInRom?.body?.access_token === 'boot-token',
+        signedIn.calls.map(({ route }) => route));
 
   const offline = await runScenario({ search: '', offline: true });
   check('plain static/offline BYO mode still opens picker, saves in IDBFS and starts offline',

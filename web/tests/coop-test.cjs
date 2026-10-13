@@ -51,7 +51,7 @@ async function newPage(browser, name) {
   const page = await context.newPage();
   page.on('pageerror', (e) => console.error(`[${name}] ${e.message}`));
   if (mode === 'discord') {
-    await page.route('**/vendor/discord-sdk.js', (route) =>
+    await page.route('**/vendor/discord-sdk.js*', (route) =>
       route.fulfill({ contentType: 'text/javascript', body: MOCK_SDK }));
   }
   return { context, page };

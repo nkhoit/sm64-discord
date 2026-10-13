@@ -1,4 +1,5 @@
-import { createDiagnostics } from './diagnostics.js';
+// Loaded by boot.js once it has an asset session (it also loads diagnostics.js with it).
+const createDiagnostics = window.createDiagnostics;
 
 // Starts the game in one of two modes:
 //
@@ -175,6 +176,8 @@ function watchHostedSettings() {
 }
 
 async function discordSignIn(clientId) {
+  // boot.js already signed in (it needed to, to load this file).
+  if (window.bootRequest) { return window.bootRequest; }
   setStatus('Signing in with Discord…');
   const { DiscordSDK } = await import('./vendor/discord-sdk.js');
   const sdk = new DiscordSDK(clientId);

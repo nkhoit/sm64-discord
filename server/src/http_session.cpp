@@ -32,6 +32,18 @@ const char* mime_type(const std::filesystem::path& path) {
     return nullptr;
 }
 
+// The only files anyone may fetch: the page and the code that signs in. Everything else (the
+// engine, the page's own game code) needs an asset session from POST /api/assets as ?s=.
+bool is_public_file(const std::filesystem::path& relative) {
+    if (relative == "index.html" || relative == "boot.js") { return true; }
+    auto first = relative.begin();
+    return first != relative.end() && *first == "vendor" && std::next(first) != relative.end();
+}
+
+std::int64_t unix_now() {
+    return std::chrono::duration_cast<std::chrono::seconds>(std::chrono::system_clock::now().time_since_epoch()).count();
+}
+
 bool path_is_within(const std::filesystem::path& path, const std::filesystem::path& root) {
     auto relative = path.lexically_relative(root);
     return relative.empty() ? path == root : *relative.begin() != "..";
@@ -208,8 +220,9 @@ void HttpSession::serve_file() {
     auto respond_error = [&](http::status status) {
         auto res = std::make_shared<http::response<http::string_body>>(status, request.version());
         res->set(http::field::content_type, "text/plain");
+        res->set(http::field::cache_control, "no-store");
         res->keep_alive(keepAlive);
-        res->body() = std::string(http::obsolete_reason(status));
+        if (request.method() != http::verb::head) { res->body() = std::string(http::obsolete_reason(status)); }
         res->prepare_payload();
         send(res);
     };
@@ -222,6 +235,18 @@ void HttpSession::serve_file() {
     // keep requests inside the web root, and to the kinds of files the game is made of
     std::filesystem::path relative = std::filesystem::path(path.substr(1)).lexically_normal();
     const char* contentType = mime_type(relative);
+
+    // Engine files: only with a valid asset session (401 without one, 403 for a bad or expired one).
+    // They're answered "private" so no shared cache (Cloudflare's included) keeps a copy for others.
+    const bool gated = !relative.empty() && !is_public_file(relative);
+    if (gated) {
+        switch (mApi.asset_auth().verify(query_value(target, "s"), unix_now())) {
+            case AssetAuth::Check::Ok: break;
+            case AssetAuth::Check::Missing: respond_error(http::status::unauthorized); return;
+            case AssetAuth::Check::Invalid:
+            case AssetAuth::Check::Expired: respond_error(http::status::forbidden); return;
+        }
+    }
     struct stat st {};
     const auto fullPath = mWwwRoot / relative;
     std::error_code pathError;
@@ -263,7 +288,7 @@ void HttpSession::serve_file() {
     const std::string lastModified = http_date(st.st_mtime);
 
     auto set_headers = [&](auto& res) {
-        res.set(http::field::cache_control, "no-cache");
+        res.set(http::field::cache_control, gated ? "private, no-cache" : "no-cache");
         res.set(http::field::etag, etag);
         res.set(http::field::last_modified, lastModified);
         res.set(http::field::vary, "Accept-Encoding");

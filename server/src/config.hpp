@@ -22,6 +22,8 @@ struct Config {
     std::string discordClientId;
     std::string discordClientSecret;
     std::string discordApiBase = "https://discord.com";
+    // Signs the short-lived sessions for the engine files (SM64_ASSET_SECRET, or random per start).
+    std::string assetSecret;
 
     // Lets browsers on the local network play without Discord, for testing.
     // Refused for any request that came through a reverse proxy.
